@@ -55,11 +55,20 @@ pub fn sys_exit(status: i32) -> ! {
         }
         // TODO: wake up threads, which are blocked by futex, and waiting for the address pointed by clear_child_tid
     }
+    let mut aspace = curr.task_ext().aspace.lock();
+    let _= aspace.clear();
+    axhal::arch::flush_tlb(None);
+
     axtask::exit(status);
 }
 
 pub fn sys_exit_group(status: i32) -> ! {
     warn!("Temporarily replace sys_exit_group with sys_exit");
+    let curr = current();
+    let mut aspace = curr.task_ext().aspace.lock();
+    let _= aspace.clear();
+    axhal::arch::flush_tlb(None);
+
     axtask::exit(status);
 }
 
