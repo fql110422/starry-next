@@ -19,30 +19,31 @@ pub fn sys_mount(
     let fs_type = fs_type.get_as_str()?;
     let device_path = handle_file_path(AT_FDCWD, Some(source.as_ptr() as _), false)?;
     let mount_path = handle_file_path(AT_FDCWD, Some(target.as_ptr() as _), true)?;
+
     info!(
         "mount {:?} to {:?} with fs_type={:?}",
         device_path, mount_path, fs_type
     );
 
-    if fs_type != "vfat" {
-        debug!("fs_type can only be vfat.");
-        return Err(LinuxError::EPERM);
+    match fs_type {
+        "vfat" => {
+            if !mount_fat_fs(&device_path, &mount_path) {
+                debug!("mount error");
+                return Err(LinuxError::EPERM);
+            }
+        }
+        "ext4" => {
+            if !mount_ext4_fs(&device_path, &mount_path) {
+                debug!("mount error");
+                return Err(LinuxError::EPERM);
+            }
+        }
+        _ => {
+            debug!("Unsupported fs_type: {}", fs_type);
+            return Err(LinuxError::EPERM);
+        }
     }
 
-    if !mount_path.exists() {
-        debug!("mount path not exist");
-        return Err(LinuxError::EPERM);
-    }
-
-    if check_mounted(&mount_path) {
-        debug!("mount path includes mounted fs");
-        return Err(LinuxError::EPERM);
-    }
-
-    if !mount_fat_fs(&device_path, &mount_path) {
-        debug!("mount error");
-        return Err(LinuxError::EPERM);
-    }
     Ok(0)
 }
 
@@ -122,6 +123,29 @@ pub fn mount_fat_fs(device_path: &FilePath, mount_path: &FilePath) -> bool {
     );
     false
 }
+
+   // ext4 文件系统
+pub fn mount_ext4_fs(device_path: &FilePath, mount_path: &FilePath) -> bool {
+    if !mount_path.exists() {
+        debug!("mount path does not exist");
+        return false;
+    }
+
+    if check_mounted(mount_path) {
+        debug!("mount path already includes a mounted filesystem");
+        return false;
+    }
+
+ 
+    MOUNTED.lock().push(MountedFs::new(device_path, mount_path));
+    info!(
+        "mounted {} to {}",
+        device_path.as_str(),
+        mount_path.as_str()
+    );
+    true
+}
+
 
 /// unmount a fatfs device
 pub fn umount_fat_fs(mount_path: &FilePath) -> bool {
